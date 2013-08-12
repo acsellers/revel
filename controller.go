@@ -30,6 +30,7 @@ type Controller struct {
 	Params     *Params                // Parameters from URL and form (including multipart).
 	Args       map[string]interface{} // Per-request scratch space.
 	RenderArgs map[string]interface{} // Args passed to the template.
+	Layout     string                 // Layout to be applied
 	Validation *Validation            // Data validation helpers
 }
 
@@ -43,6 +44,7 @@ func NewController(req *Request, resp *Response) *Controller {
 			"RunMode": RunMode,
 			"DevMode": DevMode,
 		},
+		Layout: DefaultLayout[req.Format],
 	}
 }
 
@@ -94,12 +96,17 @@ func (c *Controller) Render(extraRenderArgs ...interface{}) Result {
 		ERROR.Println("No RenderArg names found for Render call on line", line,
 			"(Method", c.MethodType.Name, ")")
 	}
-
-	return c.RenderTemplate(c.Name + "/" + c.MethodType.Name + "." + c.Request.Format)
+	if c.Layout == "" {
+		return c.RenderTemplate(c.Name + "/" + c.MethodType.Name + "." + c.Request.Format)
+	} else {
+		return c.RenderTemplateWithLayout(c.Layout, c.Name+"/"+c.MethodType.Name+"."+c.Request.Format)
+	}
 }
 
 // A less magical way to render a template.
 // Renders the given template, using the current RenderArgs.
+// Will not use a layout around the template, for that use
+// RenderTemplateWithLayout
 func (c *Controller) RenderTemplate(templatePath string) Result {
 
 	// Get the Template.
@@ -110,6 +117,27 @@ func (c *Controller) RenderTemplate(templatePath string) Result {
 
 	return &RenderTemplateResult{
 		Template:   template,
+		RenderArgs: c.RenderArgs,
+	}
+}
+
+// A less magical way to render a template within a layout
+// Renders the given template within the passed layout,
+// using the current RenderArgs.
+func (c *Controller) RenderTemplateWithLayout(layout, templatePath string) Result {
+	template, err := MainTemplateLoader.Template(templatePath)
+	if err != nil {
+		return c.RenderError(err)
+	}
+	layoutTemplate, err := MainTemplateLoader.Layout(layout)
+	if err != nil {
+		return c.RenderError(err)
+	}
+
+	c.RenderArgs["revelTemplateTarget"] = template
+
+	return &RenderTemplateResult{
+		Template:   layoutTemplate,
 		RenderArgs: c.RenderArgs,
 	}
 }

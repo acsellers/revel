@@ -1,6 +1,7 @@
 package revel
 
 import (
+	"bytes"
 	"fmt"
 	"html"
 	"html/template"
@@ -13,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"text/template/parse"
 	"time"
 )
 
@@ -31,6 +33,8 @@ type TemplateLoader struct {
 	templatePaths map[string]string
 }
 
+type TemplateParser func(string, string) (map[string]*parse.Tree, error)
+
 type Template interface {
 	Name() string
 	Content() []string
@@ -41,6 +45,12 @@ var invalidSlugPattern = regexp.MustCompile(`[^a-z0-9 _-]`)
 var whiteSpacePattern = regexp.MustCompile(`\s+`)
 
 var (
+	// The alternate format parser functions
+	TemplateParsers = map[string]TemplateParser{}
+
+	// The default layout to render
+	DefaultLayout = map[string]string{}
+
 	// The functions available for use in the templates.
 	TemplateFuncs = map[string]interface{}{
 		"url": ReverseUrl,
@@ -153,6 +163,19 @@ var (
 			return date.Format(DateTimeFormat)
 		},
 		"slug": Slug,
+		"yield": func(renderArgs map[string]interface{}) (template.HTML, error) {
+			if tmpl, ok := renderArgs["revelTemplateTarget"]; ok {
+				var b bytes.Buffer
+				if gTmpl, ok := tmpl.(GoTemplate); ok {
+					err := gTmpl.Render(&b, renderArgs)
+					if err != nil {
+						return template.HTML(""), err
+					}
+					return template.HTML(b.String()), nil
+				}
+			}
+			return template.HTML(""), nil
+		},
 	}
 )
 
@@ -224,6 +247,16 @@ func (loader *TemplateLoader) Refresh() *Error {
 				return nil
 			}
 
+			var currentParser TemplateParser
+			lastExt := filepath.Ext(path)
+			for lastExt != "" {
+				if ldr, ok := TemplateParsers[lastExt[1:]]; ok {
+					currentParser = ldr
+				}
+				path = path[:len(path)-len(lastExt)]
+				lastExt = filepath.Ext(path)
+			}
+
 			fileStr := string(fileBytes)
 
 			if templateSet == nil {
@@ -248,7 +281,22 @@ func (loader *TemplateLoader) Refresh() *Error {
 						// Reset to default otherwise
 						templateSet.Delims("", "")
 					}
-					_, err = templateSet.Parse(fileStr)
+					if currentParser == nil {
+						_, err = templateSet.Parse(fileStr)
+						TRACE.Printf("Loading template: %s\n", templateName)
+					} else {
+						TRACE.Printf("Loading template with parser: %s\n", templateName)
+						var trees map[string]*parse.Tree
+						trees, err = currentParser(templateName, fileStr)
+						if err == nil {
+							for name, tree := range trees {
+								_, err = templateSet.AddParseTree(name, tree)
+								if err != nil {
+									break
+								}
+							}
+						}
+					}
 				}()
 
 				if funcError != nil {
@@ -261,7 +309,23 @@ func (loader *TemplateLoader) Refresh() *Error {
 				} else {
 					templateSet.Delims("", "")
 				}
-				_, err = templateSet.New(templateName).Parse(fileStr)
+				if currentParser == nil {
+					_, err = templateSet.New(templateName).Parse(fileStr)
+					TRACE.Printf("Loading template: %s\n", templateName)
+				} else {
+					TRACE.Printf("Loading template with parser: %s\n", templateName)
+					var trees map[string]*parse.Tree
+					trees, err = currentParser(templateName, fileStr)
+					if err == nil {
+						for name, tree := range trees {
+							_, err = templateSet.AddParseTree(name, tree)
+							if err != nil {
+								break
+							}
+						}
+					}
+				}
+
 			}
 
 			// Store / report the first error encountered.
@@ -341,6 +405,31 @@ func (loader *TemplateLoader) Template(name string) (Template, error) {
 
 	if tmpl == nil && err == nil {
 		return nil, fmt.Errorf("Template %s not found.", name)
+	}
+
+	return GoTemplate{tmpl, loader}, err
+}
+
+// Return the Layout with the given name.  The name is the template's path
+// relative to a 'Layout' folder in the  template loader root. Do not prepend
+// Layout/ to the layout name as that is not necessary.
+//
+// An Error is returned if there was any problem with any of the templates.  (In
+// this case, if a template is returned, it may still be usable.)
+func (loader *TemplateLoader) Layout(name string) (Template, error) {
+	// Look up and return the template.
+	tmpl := loader.templateSet.Lookup("Layouts/" + name)
+
+	// This is necessary.
+	// If a nil loader.compileError is returned directly, a caller testing against
+	// nil will get the wrong result.  Something to do with casting *Error to error.
+	var err error
+	if loader.compileError != nil {
+		err = loader.compileError
+	}
+
+	if tmpl == nil && err == nil {
+		return nil, fmt.Errorf("Layout %s not found.", name)
 	}
 
 	return GoTemplate{tmpl, loader}, err
