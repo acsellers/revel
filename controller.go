@@ -62,6 +62,18 @@ func (c *Controller) RenderError(err error) Result {
 	return ErrorResult{c.RenderArgs, err}
 }
 
+func (c *Controller) ContentFor(yieldName, templateName string) error {
+	template, err := MainTemplateLoader.Template(templateName)
+	if err != nil {
+		template, err = MainTemplateLoader.Template(c.Name + "/" + templateName)
+		if err != nil {
+			return err
+		}
+	}
+	c.RenderArgs["contentFor"+strings.ToTitle(yieldName)] = template
+	return nil
+}
+
 // Render a template corresponding to the calling Controller method.
 // Arguments will be added to c.RenderArgs prior to rendering the template.
 // They are keyed on their local identifier.
@@ -134,7 +146,7 @@ func (c *Controller) RenderTemplateWithLayout(layout, templatePath string) Resul
 		return c.RenderError(err)
 	}
 
-	c.RenderArgs["revelTemplateTarget"] = template
+	c.RenderArgs["contentForDefault"] = template
 
 	return &RenderTemplateResult{
 		Template:   layoutTemplate,

@@ -163,8 +163,19 @@ var (
 			return date.Format(DateTimeFormat)
 		},
 		"slug": Slug,
-		"yield": func(renderArgs map[string]interface{}) (template.HTML, error) {
-			if tmpl, ok := renderArgs["revelTemplateTarget"]; ok {
+		"yield": func(args ...interface{}) (template.HTML, error) {
+			var renderArgs map[string]interface{}
+			target := "contentForDefault"
+			switch len(args) {
+			case 1:
+				renderArgs = args[0].(map[string]interface{})
+			case 2:
+				target = "contentFor" + strings.ToTitle(args[0].(string))
+				renderArgs = args[1].(map[string]interface{})
+			default:
+				return "", fmt.Errorf("Yield: Argument Length Error")
+			}
+			if tmpl, ok := renderArgs[target]; ok {
 				var b bytes.Buffer
 				if gTmpl, ok := tmpl.(GoTemplate); ok {
 					err := gTmpl.Render(&b, renderArgs)
