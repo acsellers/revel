@@ -33,7 +33,21 @@ type TemplateLoader struct {
 	templatePaths map[string]string
 }
 
-type TemplateParser func(string, string) (map[string]*parse.Tree, error)
+// A TemplateParser is a function that takes in the content for a template
+// as loaded from a file and transforms it into a series of text/template/parse
+// Tree's in which the main one is named by the name argument stripped of the
+// parser specific extension.
+type TemplateParser func(name string, content string) (map[string]*parse.Tree, error)
+
+// AddParser is the correct way to load in a new template language
+func AddParser(fileExtensions []string, parser TemplateParser, customFunctions map[string]interface{}) {
+	for _, extension := range fileExtensions {
+		TemplateParsers[extension] = parser
+	}
+	for funcName, funcImpl := range customFunctions {
+		TemplateFuncs[funcName] = funcImpl
+	}
+}
 
 type Template interface {
 	Name() string
