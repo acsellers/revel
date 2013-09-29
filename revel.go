@@ -22,6 +22,7 @@ var (
 	BasePath   string // e.g. "/Users/robfig/gocode/src/corp/sample"
 	AppPath    string // e.g. "/Users/robfig/gocode/src/corp/sample/app"
 	ViewsPath  string // e.g. "/Users/robfig/gocode/src/corp/sample/app/views"
+	LayoutPath string // e.g. "/Users/robfig/gocode/src/corp/sample/app/layouts"
 	ImportPath string // e.g. "corp/sample"
 	SourcePath string // e.g. "/Users/robfig/gocode/src"
 
@@ -37,6 +38,7 @@ var (
 	CodePaths     []string
 	ConfPaths     []string
 	TemplatePaths []string
+	LayoutPaths   []string
 
 	Modules []Module
 
@@ -118,6 +120,11 @@ func Init(mode, importPath, srcPath string) {
 	TemplatePaths = []string{
 		ViewsPath,
 		path.Join(RevelPath, "templates"),
+	}
+
+	LayoutPaths = []string{
+		LayoutPath,
+		path.Join(AppPath, "layouts"),
 	}
 
 	// Load app.conf

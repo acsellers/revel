@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	htmlTmpl "html/template"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -109,7 +110,9 @@ func (r PlaintextErrorResult) Apply(req *Request, resp *Response) {
 // Action methods return this result to request a template be rendered.
 type RenderTemplateResult struct {
 	Template   Template
+	Layout     Template
 	RenderArgs map[string]interface{}
+	RenderTmpl map[string]htmlTmpl.HTML
 }
 
 func (r *RenderTemplateResult) Apply(req *Request, resp *Response) {
@@ -135,7 +138,11 @@ func (r *RenderTemplateResult) Apply(req *Request, resp *Response) {
 	// error pages distorted by HTML already written)
 	if chunked && !DevMode {
 		resp.WriteHeader(http.StatusOK, "text/html")
-		r.render(req, resp, out)
+		if r.Layout == nil {
+			r.render(req, resp, out)
+		} else {
+			r.renderWithLayout(req, resp, out)
+		}
 		return
 	}
 
@@ -144,7 +151,12 @@ func (r *RenderTemplateResult) Apply(req *Request, resp *Response) {
 	// Otherwise, template render errors may result in unpredictable HTML (and
 	// would carry a 200 status code)
 	var b bytes.Buffer
-	r.render(req, resp, &b)
+	if r.Layout == nil {
+		r.render(req, resp, &b)
+	} else {
+		r.renderWithLayout(req, resp, &b)
+	}
+
 	if !chunked {
 		resp.Out.Header().Set("Content-Length", strconv.Itoa(b.Len()))
 	}
@@ -153,6 +165,8 @@ func (r *RenderTemplateResult) Apply(req *Request, resp *Response) {
 }
 
 func (r *RenderTemplateResult) render(req *Request, resp *Response, wr io.Writer) {
+	r.RenderArgs["ContentForItems"] = r.RenderTmpl
+
 	err := r.Template.Render(wr, r.RenderArgs)
 	if err == nil {
 		return
@@ -170,6 +184,38 @@ func (r *RenderTemplateResult) render(req *Request, resp *Response, wr io.Writer
 	}
 	compileError := &Error{
 		Title:       "Template Execution Error",
+		Path:        templateName,
+		Description: description,
+		Line:        line,
+		SourceLines: templateContent,
+	}
+	resp.Status = 500
+	ERROR.Printf("Template Execution Error (in %s): %s", templateName, description)
+	ErrorResult{r.RenderArgs, compileError}.Apply(req, resp)
+}
+
+func (r *RenderTemplateResult) renderWithLayout(req *Request, resp *Response, wr io.Writer) {
+	var b bytes.Buffer
+	r.render(req, resp, &b)
+	r.RenderTmpl[""] = htmlTmpl.HTML(b.String())
+
+	err := r.Layout.Render(wr, r.RenderArgs)
+	if err == nil {
+		return
+	}
+
+	var templateContent []string
+	templateName, line, description := parseTemplateError(err)
+	if templateName == "" {
+		templateName = r.Layout.Name()
+		templateContent = r.Layout.Content()
+	} else {
+		if tmpl, err := MainTemplateLoader.Template(templateName); err == nil {
+			templateContent = tmpl.Content()
+		}
+	}
+	compileError := &Error{
+		Title:       "Layout Execution Error",
 		Path:        templateName,
 		Description: description,
 		Line:        line,

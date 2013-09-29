@@ -38,6 +38,7 @@ func (c Hotels) Index() revel.Result {
 }
 
 func (c Hotels) List(search string, size, page int) revel.Result {
+	c.Layout = ""
 	if page == 0 {
 		page = 1
 	}

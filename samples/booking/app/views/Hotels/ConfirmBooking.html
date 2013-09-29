@@ -1,5 +1,3 @@
-{{template "header.html" .}}
-
 <h1>Confirm hotel booking</h1>
 
 <form method="POST" action="{{url "Hotels.ConfirmBooking" .hotel.HotelId}}">
@@ -54,5 +52,3 @@
     <a href="{{url "Hotels.Show" .hotel.HotelId}}">Cancel</a>
   </p>
 </form>
-
-{{template "footer.html" .}}

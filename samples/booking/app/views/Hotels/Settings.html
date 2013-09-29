@@ -1,6 +1,4 @@
 {{set . "title" "Settings"}}
-{{template "header.html" .}}
-
 <h1>Change your password</h1>
 
 <form method="POST" action="{{url "Hotels.SaveSettings"}}">
@@ -23,5 +21,3 @@
     <input type="submit" value="Save"> <a href="{{url "Hotels.Index"}}">Cancel</a>
   </p>
 </form>
-
-{{template "footer.html" .}}

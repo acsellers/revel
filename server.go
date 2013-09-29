@@ -56,6 +56,7 @@ func Run(port int) {
 	}
 
 	MainTemplateLoader = NewTemplateLoader(TemplatePaths)
+	MainTemplateLoader.layoutPaths = LayoutPaths
 
 	// The "watch" config variable can turn on and off all watching.
 	// (As a convenient way to control it all together.)
